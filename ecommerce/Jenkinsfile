@@ -102,9 +102,11 @@ pipeline {
                 sh '''
                     echo "Waiting for MySQL init and API..."
                     sleep 35
-                    curl -fsS http://localhost:3000/api/health | grep -q '"ok":true'
-                    curl -fsS "http://localhost:${FRONTEND_HOST_PORT}/api/health" | grep -q '"ok":true'
-                    curl -fsS "http://localhost:${FRONTEND_HOST_PORT}/api/products"
+                    NET="ec-net-${BUILD_TAG}"
+                    # Use Docker DNS on the app network (not localhost inside the Jenkins container).
+                    docker run --rm --network "$NET" "$CURL_IMAGE" -fsS http://backend:3000/api/health | grep -q '"ok":true'
+                    docker run --rm --network "$NET" "$CURL_IMAGE" -fsS http://frontend/api/health | grep -q '"ok":true'
+                    docker run --rm --network "$NET" "$CURL_IMAGE" -fsS http://frontend/api/products
                 '''
             }
         }
