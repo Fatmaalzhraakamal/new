@@ -3,6 +3,7 @@ services:
     image: mysql:8
     environment:
       MYSQL_ROOT_PASSWORD: "My:S3cr3t"
+      MYSQL_DATABASE: "ecommerce"
     ports:
       - "30306:3306"
     volumes:
