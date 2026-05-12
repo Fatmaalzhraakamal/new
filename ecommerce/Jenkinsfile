@@ -1,27 +1,7 @@
-// CI for the 3-tier demo (nginx + Express + MySQL).
-// Repository: https://github.com/nourhann14/Automated_E-Commerce_Deployment_Platform
-// Jenkins job SCM should point at that repo; Script Path: ecommerce/Jenkinsfile
-// Override BACKEND_IMAGE / FRONTEND_IMAGE if your Docker Hub namespace or repo names differ.
-
 pipeline {
     agent any
 
-    options {
-        timestamps()
-    }
-
     environment {
-        ECOMMERCE_DIR = 'ecommerce'
-
-        DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
-
-        BACKEND_IMAGE = 'nourhann14/ecommerce-backend'
-        FRONTEND_IMAGE = 'nourhann14/ecommerce-frontend'
-        IMAGE_TAG = "${GIT_COMMIT[0..6]}"
-
-        // Ephemeral image for HTTP checks from *inside* the app Docker network (avoids
-        // localhost/DNS issues when Jenkins itself runs in Docker: published ports bind
-        // to the Docker host, not the Jenkins container’s loopback).
         CURL_IMAGE = 'curlimages/curl:8.5.0'
     }
 
@@ -32,102 +12,39 @@ pipeline {
             }
         }
 
-        stage('Docker network') {
+        stage('Build and test') {
             steps {
-                sh '''
-                    docker network rm "ec-net-${BUILD_TAG}" 2>/dev/null || true
-                    docker network create "ec-net-${BUILD_TAG}"
-                '''
-            }
-        }
-
-        stage('Build images') {
-            steps {
-                dir("${ECOMMERCE_DIR}") {
+                dir('ecommerce') {
                     sh '''
+                        set -e
+                        NET="ec-net-${BUILD_TAG}"
+
+                        docker rm -f "ec-frontend-${BUILD_TAG}" "ec-backend-${BUILD_TAG}" "ec-mysql-${BUILD_TAG}" 2>/dev/null || true
+                        docker network rm "$NET" 2>/dev/null || true
+                        docker network create "$NET"
+
                         docker build -t "ec-backend:${BUILD_TAG}" ./backend
                         docker build -t "ec-frontend:${BUILD_TAG}" ./frontend
-                    '''
-                }
-            }
-        }
 
-        stage('Start MySQL') {
-            steps {
-                dir("${ECOMMERCE_DIR}") {
-                    sh '''
-                        docker rm -f "ec-mysql-${BUILD_TAG}" 2>/dev/null || true
-                        docker run -d \
-                          --name "ec-mysql-${BUILD_TAG}" \
-                          --network "ec-net-${BUILD_TAG}" \
-                          --network-alias db \
+                        docker run -d --name "ec-mysql-${BUILD_TAG}" --network "$NET" --network-alias db \
                           -e MYSQL_ROOT_PASSWORD='My:S3cr3t' \
                           -v "$(pwd)/db/schema.sql:/docker-entrypoint-initdb.d/1-schema.sql:ro" \
                           mysql:8
+
+                        docker run -d --name "ec-backend-${BUILD_TAG}" --network "$NET" --network-alias backend \
+                          -e DB_HOST=db -e DB_PASSWORD='My:S3cr3t' \
+                          "ec-backend:${BUILD_TAG}"
+
+                        docker run -d --name "ec-frontend-${BUILD_TAG}" --network "$NET" --network-alias frontend \
+                          "ec-frontend:${BUILD_TAG}"
+
+                        sleep 35
+
+                        docker run --rm --network "$NET" "$CURL_IMAGE" -fsS http://backend:3000/api/health | grep -q '"ok":true'
+                        docker run --rm --network "$NET" "$CURL_IMAGE" -fsS http://frontend/api/health | grep -q '"ok":true'
+                        docker run --rm --network "$NET" "$CURL_IMAGE" -fsS http://frontend/api/products
                     '''
                 }
-            }
-        }
-
-        stage('Start backend') {
-            steps {
-                sh '''
-                    docker rm -f "ec-backend-${BUILD_TAG}" 2>/dev/null || true
-                    docker run -d \
-                      --name "ec-backend-${BUILD_TAG}" \
-                      --network "ec-net-${BUILD_TAG}" \
-                      --network-alias backend \
-                      -e DB_HOST=db \
-                      -e DB_PASSWORD='My:S3cr3t' \
-                      "ec-backend:${BUILD_TAG}"
-                '''
-            }
-        }
-
-        stage('Start frontend') {
-            steps {
-                sh '''
-                    docker rm -f "ec-frontend-${BUILD_TAG}" 2>/dev/null || true
-                    docker run -d \
-                      --name "ec-frontend-${BUILD_TAG}" \
-                      --network "ec-net-${BUILD_TAG}" \
-                      --network-alias frontend \
-                      "ec-frontend:${BUILD_TAG}"
-                '''
-            }
-        }
-
-        stage('Smoke test') {
-            steps {
-                sh '''
-                    echo "Waiting for MySQL init and API..."
-                    sleep 35
-                    NET="ec-net-${BUILD_TAG}"
-                    # Use Docker DNS on the app network (not localhost inside the Jenkins container).
-                    docker run --rm --network "$NET" "$CURL_IMAGE" -fsS http://backend:3000/api/health | grep -q '"ok":true'
-                    docker run --rm --network "$NET" "$CURL_IMAGE" -fsS http://frontend/api/health | grep -q '"ok":true'
-                    docker run --rm --network "$NET" "$CURL_IMAGE" -fsS http://frontend/api/products
-                '''
-            }
-        }
-
-        stage('Push to Docker Hub') {
-            steps {
-                sh '''
-                    echo "$DOCKERHUB_CREDENTIALS_PSW" | docker login \
-                      -u "$DOCKERHUB_CREDENTIALS_USR" \
-                      --password-stdin
-
-                    docker tag "ec-backend:${BUILD_TAG}" "${BACKEND_IMAGE}:${IMAGE_TAG}"
-                    docker tag "ec-backend:${BUILD_TAG}" "${BACKEND_IMAGE}:latest"
-                    docker push "${BACKEND_IMAGE}:${IMAGE_TAG}"
-                    docker push "${BACKEND_IMAGE}:latest"
-
-                    docker tag "ec-frontend:${BUILD_TAG}" "${FRONTEND_IMAGE}:${IMAGE_TAG}"
-                    docker tag "ec-frontend:${BUILD_TAG}" "${FRONTEND_IMAGE}:latest"
-                    docker push "${FRONTEND_IMAGE}:${IMAGE_TAG}"
-                    docker push "${FRONTEND_IMAGE}:latest"
-                '''
             }
         }
     }
@@ -137,13 +54,6 @@ pipeline {
             sh '''
                 docker rm -f "ec-frontend-${BUILD_TAG}" "ec-backend-${BUILD_TAG}" "ec-mysql-${BUILD_TAG}" 2>/dev/null || true
                 docker network rm "ec-net-${BUILD_TAG}" 2>/dev/null || true
-            '''
-        }
-        failure {
-            sh '''
-                docker logs --tail=200 "ec-backend-${BUILD_TAG}" 2>/dev/null || true
-                docker logs --tail=200 "ec-frontend-${BUILD_TAG}" 2>/dev/null || true
-                docker logs --tail=200 "ec-mysql-${BUILD_TAG}" 2>/dev/null || true
             '''
         }
     }

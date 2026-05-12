@@ -1,27 +1,38 @@
-version: '3'
-
-
-
 services:
   db:
     image: mysql:8
-    container_name: mysql-container
-    environment: 
-      MYSQL_ROOT_PASSWORD: 'My:S3cr3t'
+    environment:
+      # Quoted so ':' in the password is valid YAML.
+      MYSQL_ROOT_PASSWORD: "My:S3cr3t"
     ports:
       - "30306:3306"
     volumes:
       - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    networks:
+      - ec-net
+    restart: always
+
   backend:
     build: ./backend
-    container_name: backend-container
     ports:
       - "3000:3000"
     depends_on:
       - db
+    networks:
+      - ec-net
+    restart: always
+
   frontend:
     build: ./frontend
-    container_name: frontend-container
     ports:
-      - "80:80"
+      # Port 80 on Windows is often used by IIS; use 8080 on the host instead.
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - ec-net
+    restart: always
 
+networks:
+  ec-net:
+    driver: bridge
