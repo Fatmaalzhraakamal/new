@@ -26,7 +26,7 @@ services:
     build: ./frontend
     ports:
       # Port 80 on Windows is often used by IIS; use 8080 on the host instead.
-      - "3000:80"
+      - "3001:80"
     depends_on:
       - backend
     networks:
