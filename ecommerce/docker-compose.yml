@@ -2,7 +2,6 @@ services:
   db:
     image: mysql:8
     environment:
-      # Quoted so ':' in the password is valid YAML.
       MYSQL_ROOT_PASSWORD: "My:S3cr3t"
     ports:
       - "30306:3306"
@@ -13,7 +12,7 @@ services:
     restart: always
 
   backend:
-    build: ./backend
+    image: fatmakamal21/ecommerce-backend:latest
     ports:
       - "3000:3000"
     depends_on:
@@ -23,9 +22,8 @@ services:
     restart: always
 
   frontend:
-    build: ./frontend
+    image: fatmakamal21/ecommerce-frontend:latest
     ports:
-      # Port 80 on Windows is often used by IIS; use 8080 on the host instead.
       - "3001:80"
     depends_on:
       - backend
