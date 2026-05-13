@@ -3,7 +3,7 @@ const productsGrid = document.getElementById("productsGrid");
 const refreshBtn = document.getElementById("refreshBtn");
 const addForm = document.getElementById("addForm");
 const formMsg = document.getElementById("formMsg");
-# this is a comment
+// this is a comment in javascript
 function dollarsToCents(input) {
   const n = Number(String(input).replace(/[^0-9.]/g, ""));
   if (!Number.isFinite(n)) return null;
@@ -126,5 +126,7 @@ addForm.addEventListener("submit", async (e) => {
 });
 
 checkHealth();
-refreshProducts().catch(() => {});
+refreshProducts().catch((e) => {
+  productsGrid.innerHTML = `<div class="muted">Error: ${escapeHtml(e.message)}</div>`;
+});
 

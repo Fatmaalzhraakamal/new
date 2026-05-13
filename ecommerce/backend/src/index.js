@@ -38,6 +38,6 @@ app.use((err, req, res, next) => {
 const port = Number(process.env.PORT || 3000);
 app.listen(port, () => {
   // eslint-disable-next-line no-console
-  console.log(`API listening on http://localhost:${port}`);
+  console.log(`API listening on http://0.0.0.0:${port}`);
 });
 
