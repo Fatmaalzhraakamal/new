@@ -16,7 +16,6 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: fatmakamal21/ecommerce-frontend:17
           ports:
             - containerPort: 80
 
